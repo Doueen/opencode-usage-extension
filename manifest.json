@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "OpenCode 用量监控",
+  "version": "1.0.0",
+  "description": "极简版：查看 opencode Go 订阅配额与 DeepSeek 余额（30秒自动刷新）",
+  "permissions": ["alarms", "storage"],
+  "host_permissions": [
+    "https://opencode.ai/*",
+    "https://api.deepseek.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "OpenCode 用量监控"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

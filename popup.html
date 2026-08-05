@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+/* ═══════════ 主题系统（5 风格）═══════════ */
+:root, body[data-theme="cyber"]{
+  --bg:#0f1420; --bg2:#0a0e16; --panel:#161d2e; --panel2:#1c2540;
+  --line:#2a3654; --ink:#e8eefc; --dim:#7d8db0;
+  --c1:#00e5ff; --c2:#ff2e88; --c3:#ffb000;
+  --mono:ui-monospace,Consolas,"Noto Sans Mono CJK SC",monospace;
+  --sans:-apple-system,"PingFang SC",sans-serif;
+  --fs:12px; --radius:4px; --blur:none; --font:var(--mono);
+  --glow:0 0 0 rgba(0,0,0,0);
+}
+body[data-theme="matrix"]{
+  --bg:#000; --bg2:#000; --panel:#000; --panel2:#000;
+  --line:#00ff9c; --ink:#00ff9c; --dim:#00aa66;
+  --c1:#00ff9c; --c2:#ffb000; --c3:#ff0000;
+  --fs:12px; --radius:0px; --font:var(--mono);
+}
+body[data-theme="glass"]{
+  --bg:linear-gradient(160deg,#1a0b2e,#0d0d1a 60%,#0a1420);
+  --bg2:#0d0d1a; --panel:rgba(255,255,255,.07); --panel2:rgba(255,255,255,.12);
+  --line:rgba(0,229,255,.35); --ink:#eef6ff; --dim:#9fb4d8;
+  --c1:#00e5ff; --c2:#b07dff; --c3:#ffd54f;
+  --fs:12px; --radius:14px; --blur:blur(14px);
+  --font:var(--sans); --glow:0 0 18px rgba(0,229,255,.25);
+}
+body[data-theme="paper"]{
+  --bg:#f7f4ec; --bg2:#efe9dc; --panel:#fffdf8; --panel2:#faf6ec;
+  --line:#d8cfbe; --ink:#2b2b28; --dim:#8a8372;
+  --c1:#c0392b; --c2:#2c5f5d; --c3:#b8860b;
+  --fs:12px; --radius:2px; --font:var(--sans);
+  --serif:"Songti SC","Noto Serif SC","SimSun",serif;
+}
+body[data-theme="pixel"]{
+  --bg:#1a1a2e; --bg2:#16162a; --panel:#222244; --panel2:#2a2a52;
+  --line:#4a4a7a; --ink:#f0f0ff; --dim:#8888bb;
+  --c1:#00ff88; --c2:#ffcc00; --c3:#ff5555;
+  --fs:11px; --radius:0px; --font:var(--mono);
+}
+
+/* ═══════════ 基础 ═══════════ */
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  width:340px;background:var(--bg);background-attachment:fixed;
+  color:var(--ink);font-family:var(--font);font-size:var(--fs);line-height:1.5;
+  transition:background .3s,color .3s;
+}
+.wrap{padding:14px;position:relative}
+h1{font-size:13px;letter-spacing:2px;color:var(--c1);display:flex;align-items:center;gap:8px}
+h1::before{content:"▮"}
+.head-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.head-right{display:flex;align-items:center;gap:8px}
+.clock{color:var(--dim);font-size:10px}
+.gear{
+  background:transparent;border:1px solid var(--line);color:var(--dim);
+  font-size:13px;width:24px;height:24px;line-height:1;border-radius:var(--radius);
+  cursor:pointer;transition:all .2s;padding:0;
+}
+.gear:hover{border-color:var(--c1);color:var(--c1);transform:rotate(30deg)}
+.sub{color:var(--dim);font-size:10px;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.sub .dot{width:7px;height:7px;border-radius:50%;background:var(--c1);display:inline-block;animation:pulse 2s infinite;flex:none}
+.sub .dot.warn{background:var(--c3);animation:pulse .8s infinite}
+.sub .dot.err{background:var(--c3);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ═══════════ 仪表卡（合一）═══════════ */
+.dash{
+  border:1px solid var(--line);background:var(--panel);border-radius:var(--radius);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  box-shadow:var(--glow);padding:12px 14px;margin-bottom:10px;
+  transition:transform .2s,box-shadow .2s,border-color .2s;
+}
+.dash:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--c1) 40%,var(--line))}
+.sec-title{font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline}
+.sec-title .st{color:var(--c1);font-size:10px}
+
+/* 配额行：名称 大% 进度条 / 重置时间 */
+.qrow{display:grid;grid-template-columns:58px 40px 1fr;gap:8px;align-items:center;padding:6px 0}
+.qrow + .qrow{border-top:1px dashed var(--line)}
+.qname{color:var(--dim);font-size:10px}
+.qval{color:var(--c2);font-weight:700;text-align:right;font-size:15px;letter-spacing:0}
+.qbar{height:8px;background:var(--panel2);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line)}
+.qbar i{display:block;height:100%;background:linear-gradient(90deg,var(--c1),var(--c2));transform-origin:left;transition:transform .8s ease}
+.qbar i.warn{background:linear-gradient(90deg,var(--c3),#ff0000)}
+.qreset{grid-column:2/4;color:var(--dim);font-size:9px;text-align:right;margin-top:-3px}
+
+/* 分隔渐变线 */
+.divider{height:1px;margin:10px 0;background:linear-gradient(90deg,transparent,var(--line) 30%,var(--line) 70%,transparent)}
+
+/* 余额 */
+.brow{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
+.bcur{color:var(--dim);font-size:10px}
+.bamt{font-size:24px;color:var(--c1);font-weight:700;letter-spacing:0;font-family:var(--font)}
+.bsub{color:var(--dim);font-size:9px;margin-top:2px}
+
+/* ═══════════ 错误/提示 ═══════════ */
+.errbox{color:var(--c3);font-size:10px;padding:4px 0;word-break:break-all}
+.hint{color:var(--dim);font-size:10px;margin-bottom:8px}
+
+/* ═══════════ 官网入口（小按钮）═══════════ */
+#go-site{display:block;text-decoration:none;margin-bottom:10px}
+.go-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  border:1px solid var(--line);background:var(--panel);border-radius:var(--radius);
+  padding:8px 12px;color:var(--dim);font-size:11px;letter-spacing:1px;
+  transition:all .2s;backdrop-filter:var(--blur);
+}
+.go-btn:hover{border-color:var(--c1);color:var(--c1);box-shadow:var(--glow)}
+.go-btn b{color:var(--c1);font-weight:700}
+
+/* ═══════════ Key 输入 ═══════════ */
+.keyrow{display:flex;gap:6px;margin-top:8px}
+.keyrow input{
+  flex:1;background:var(--bg2);border:1px solid var(--line);color:var(--ink);
+  font-family:var(--mono);font-size:10px;padding:6px 8px;border-radius:var(--radius);outline:none;
+}
+.keyrow input:focus{border-color:var(--c1)}
+.keyrow button{
+  background:transparent;border:1px solid var(--c1);color:var(--c1);
+  font-family:var(--mono);font-size:10px;padding:6px 10px;border-radius:var(--radius);cursor:pointer;
+}
+.keyrow button:hover{background:color-mix(in srgb,var(--c1) 15%,transparent)}
+
+footer{margin-top:6px;color:var(--dim);font-size:9px;text-align:center;padding-bottom:2px}
+
+/* ═══════════ 设置弹出框 ═══════════ */
+.modal-overlay{
+  position:fixed;inset:0;z-index:99;
+  background:color-mix(in srgb,var(--bg2) 70%,transparent);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  display:flex;align-items:center;justify-content:center;
+}
+.modal{
+  width:290px;max-width:92%;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);box-shadow:var(--glow);padding:14px;
+}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.modal-head span{font-size:12px;letter-spacing:2px;color:var(--c1);font-weight:700}
+.modal-x{background:transparent;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:2px 6px}
+.modal-x:hover{color:var(--c1)}
+.set-group{margin-bottom:14px}
+.set-group:last-child{margin-bottom:0}
+.set-lbl{color:var(--dim);font-size:9px;letter-spacing:1px;margin-bottom:8px}
+.theme-bar{display:flex;gap:6px;align-items:center}
+.tbtn{
+  width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid var(--line);
+  position:relative;transition:transform .15s;padding:0;flex:none;
+}
+.tbtn:hover{transform:scale(1.15)}
+.tbtn.on{border-color:var(--c1);box-shadow:0 0 8px var(--glow)}
+.tbtn .tt{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--dim);white-space:nowrap;display:none;z-index:2}
+.tbtn:hover .tt{display:block}
+.t-matrix{background:#000;border-color:#00ff9c}
+.t-glass{background:linear-gradient(160deg,#1a0b2e,#0d0d1a);border-color:#00e5ff}
+.t-paper{background:#f7f4ec;border-color:#c0392b}
+.t-pixel{background:#1a1a2e;border-color:#00ff88}
+.t-cyber{background:#0f1420;border-color:#ff2e88}
+.freq-bar{display:flex;gap:6px;align-items:center}
+.fbtn{
+  background:transparent;border:1px solid var(--line);color:var(--dim);
+  font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:var(--radius);
+  cursor:pointer;transition:all .15s;flex:1;
+}
+.fbtn:hover{border-color:var(--c1);color:var(--c1)}
+.fbtn.on{background:color-mix(in srgb,var(--c1) 15%,transparent);border-color:var(--c1);color:var(--c1);font-weight:700}
+.freq-custom{display:flex;gap:4px;margin-top:8px}
+.freq-custom input{
+  flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);color:var(--ink);
+  font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:var(--radius);outline:none;
+}
+.freq-custom input:focus{border-color:var(--c1)}
+.freq-custom button{
+  background:transparent;border:1px solid var(--c1);color:var(--c1);
+  font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:var(--radius);cursor:pointer;flex:none;
+}
+.freq-custom button:hover{background:color-mix(in srgb,var(--c1) 15%,transparent)}
+
+/* Badge 配置 */
+.badge-bar{display:flex;gap:6px;flex-wrap:wrap}
+.bbtn{
+  background:transparent;border:1px solid var(--line);color:var(--dim);
+  font-family:var(--mono);font-size:10px;padding:5px 8px;border-radius:var(--radius);
+  cursor:pointer;transition:all .15s;flex:1;min-width:52px;
+}
+.bbtn:hover{border-color:var(--c1);color:var(--c1)}
+.bbtn.on{background:color-mix(in srgb,var(--c1) 15%,transparent);border-color:var(--c1);color:var(--c1);font-weight:700}
+
+/* ═══════════ 主题特色装饰 ═══════════ */
+body[data-theme="matrix"] .wrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.12;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,#00ff9c 2px 3px);
+}
+body[data-theme="matrix"] h1::after{content:"_";color:var(--c1);animation:blink 1s step-end infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+body[data-theme="matrix"] .dash{border-style:solid;box-shadow:0 0 10px rgba(0,255,156,.12)}
+body[data-theme="matrix"] .qval{color:var(--c1)}
+
+body[data-theme="glass"] .dash::before{
+  content:"";display:block;height:1px;margin:-12px -14px 10px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+}
+body[data-theme="glass"] .qval{color:var(--c2)}
+body[data-theme="glass"] .bamt{text-shadow:0 0 12px rgba(0,229,255,.5)}
+
+body[data-theme="paper"] h1{font-family:var(--serif);letter-spacing:4px;color:var(--c1)}
+body[data-theme="paper"] h1::before{content:"◈ "}
+body[data-theme="paper"] .dash{background:var(--panel);box-shadow:3px 3px 0 rgba(192,57,43,.08)}
+body[data-theme="paper"] .qval{color:var(--c1)}
+body[data-theme="paper"] .qbar{border:none;background:#e8e1d2}
+body[data-theme="paper"] .qbar i{background:var(--c1)}
+
+body[data-theme="pixel"] .dash{border-width:3px;box-shadow:3px 3px 0 rgba(0,0,0,.5);image-rendering:pixelated}
+body[data-theme="pixel"] .qbar{border-width:2px;border-style:solid}
+body[data-theme="pixel"] .qval{color:var(--c1)}
+body[data-theme="pixel"] .bamt{color:var(--c1)}
+body[data-theme="pixel"] .go-btn{border-width:3px;box-shadow:3px 3px 0 rgba(0,0,0,.5)}
+
+body[data-theme="cyber"] .dash{
+  border-radius:0;border-left:3px solid var(--c1);
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%);
+}
+body[data-theme="cyber"] .sec-title .st{color:var(--c2)}
+body[data-theme="cyber"] .qval{color:var(--c2)}
+body[data-theme="cyber"] .bamt{color:var(--c1)}
+body[data-theme="cyber"] h1{text-shadow:2px 2px 0 rgba(255,46,136,.4)}
+body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2)}
+</style>
+</head>
+<body data-theme="cyber">
+<div class="wrap">
+  <div class="head-row">
+    <h1>OPENCODE.USAGE</h1>
+    <div class="head-right">
+      <span class="clock" id="time"></span>
+      <button class="gear" id="btn-settings" title="设置">⚙</button>
+    </div>
+  </div>
+  <div class="sub"><span class="dot" id="status-dot"></span><span id="status">加载中...</span></div>
+
+  <!-- 仪表卡：配额 + 余额 -->
+  <div class="dash">
+    <div class="sec-title"><span>GO 订阅配额</span><span class="st" id="q-ws"></span></div>
+    <div id="q-body"><div class="hint">获取中...</div></div>
+
+    <div class="divider"></div>
+
+    <div class="sec-title"><span>DEEPSEEK 余额</span><span class="st" id="ds-st"></span></div>
+    <div id="ds-body"><div class="hint">获取中...</div></div>
+  </div>
+
+  <div id="errbox"></div>
+
+  <a id="go-site" href="#" target="_blank" rel="noopener">
+    <div class="go-btn">↗ 打开完整用量页 <b>Go</b></div>
+  </a>
+
+  <footer><span id="freq-label">每 30 秒</span>刷新 · 登录态取自当前浏览器</footer>
+</div>
+
+<!-- ═══ 设置弹出框 ═══ -->
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <span>SETTINGS</span>
+      <button class="modal-x" id="btn-close" title="关闭">✕</button>
+    </div>
+
+    <div class="set-group">
+      <div class="set-lbl">STYLE · 界面风格</div>
+      <div class="theme-bar">
+        <button class="tbtn t-matrix" data-t="matrix" title="终端矩阵"><span class="tt">终端矩阵</span></button>
+        <button class="tbtn t-glass" data-t="glass" title="玻璃拟态"><span class="tt">玻璃拟态</span></button>
+        <button class="tbtn t-paper" data-t="paper" title="极简记账"><span class="tt">极简记账</span></button>
+        <button class="tbtn t-pixel" data-t="pixel" title="复古像素"><span class="tt">复古像素</span></button>
+        <button class="tbtn t-cyber" data-t="cyber" title="赛博朋克"><span class="tt">赛博朋克</span></button>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <div class="set-lbl">REFRESH · 更新频率</div>
+      <div class="freq-bar">
+        <button class="fbtn" data-f="30">30s</button>
+        <button class="fbtn" data-f="60">1m</button>
+        <button class="fbtn" data-f="300">5m</button>
+        <button class="fbtn" data-f="600">10m</button>
+        <button class="fbtn" data-f="1800">30m</button>
+      </div>
+      <div class="freq-custom">
+        <input id="freq-input" type="number" min="1" step="1" placeholder="自定义秒数">
+        <button id="freq-apply">应用</button>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <div class="set-lbl">WORKSPACE · OpenCode 工作区</div>
+      <div class="freq-custom">
+        <input id="ws-input" placeholder="wrk_... 工作区 ID">
+        <button id="ws-save">保存</button>
+      </div>
+      <div class="hint" style="margin-top:6px">在 opencode.ai 官网页面 URL 中可找到（/workspace/&lt;ID&gt;/）。用于读取你的配额。</div>
+    </div>
+
+    <div class="set-group">
+      <div class="set-lbl">DEEPSEEK · 余额查询（可选）</div>
+      <div class="keyrow">
+        <input id="key-input" type="password" placeholder="sk-... 留空则不启用余额显示">
+        <button id="key-save">保存</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Key 仅保存在本浏览器，仅用于调用官方余额 API，不会上传到任何服务器。</div>
+    </div>
+
+    <div class="set-group">
+      <div class="set-lbl">BADGE · 工具栏角标</div>
+      <div class="badge-bar">
+        <button class="bbtn" data-b="rolling">滚动已用</button>
+        <button class="bbtn" data-b="weekly">周已用</button>
+        <button class="bbtn" data-b="monthly">月已用</button>
+        <button class="bbtn" data-b="weekly_remain">周剩余</button>
+        <button class="bbtn" data-b="off">关闭</button>
+      </div>
+      <div class="hint" style="margin-top:6px">图标角标显示所选数值百分比（如周剩余 72%）。</div>
+    </div>
+  </div>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>
