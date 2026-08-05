@@ -13,8 +13,30 @@ async function getWsId() {
 
 /* 通过 chrome.cookies 读取 opencode 登录态（SW fetch 不带 cookie，必须手动附加） */
 async function getAuthCookie() {
-  const cookies = await chrome.cookies.getAll({ domain: "opencode.ai" });
-  return cookies.map(c => c.name + "=" + c.value).join("; ");
+  let cookies = [];
+  // 策略1：子域通配（匹配 .opencode.ai 及其所有子域）
+  try {
+    cookies = await chrome.cookies.getAll({ domain: ".opencode.ai" });
+  } catch (e) { /* 权限不足时忽略 */ }
+  // 策略2：精确站点（auth.opencode.ai 是登录域）
+  if (!cookies.length) {
+    try {
+      cookies = await chrome.cookies.getAll({ url: "https://opencode.ai/" });
+      if (!cookies.some(c => c.domain.includes("opencode"))) {
+        const authCs = await chrome.cookies.getAll({ url: "https://auth.opencode.ai/" });
+        cookies = cookies.concat(authCs);
+      }
+    } catch (e) { /* 忽略 */ }
+  }
+  // 过滤出有值的 auth/session cookie
+  const relevant = cookies.filter(c => c.value && (c.name === "auth" || c.name.includes("session") || c.name.includes("token")));
+  const source = relevant.length ? relevant : cookies;
+  const joined = source.map(c => c.name + "=" + c.value).join("; ");
+  // 调试：记录是否拿到 auth cookie
+  if (!source.some(c => c.name === "auth")) {
+    console.warn("[oc-usage] 未找到 auth cookie，拿到:", source.map(c => c.name).join(",") || "无");
+  }
+  return joined;
 }
 
 /* ── opencode 配额 ── */
@@ -22,12 +44,22 @@ async function fetchQuota() {
   const wsId = await getWsId();
   if (!wsId) throw new Error("no_wsid");
   const wsUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go";
+
+  // 尝试1：手动附加 cookie 头
   const cookie = await getAuthCookie();
-  if (!cookie) throw new Error("not_logged_in");
-  const res = await fetch(wsUrl, {
-    credentials: "omit",
-    headers: { "Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
-  });
+  let res = null;
+  if (cookie) {
+    res = await fetch(wsUrl, {
+      credentials: "omit",
+      headers: { "Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
+    });
+  }
+  // 尝试2：回退 credentials include（扩展对 host_permissions 域可能自动带 cookie）
+  if (!res || res.status === 302 || res.status === 401 || res.status === 403) {
+    const res2 = await fetch(wsUrl, { credentials: "include" }).catch(() => null);
+    if (res2 && res2.ok) res = res2;
+  }
+  if (!res) throw new Error("not_logged_in");
   if (res.status === 302 || res.status === 401 || res.status === 403) throw new Error("not_logged_in");
   if (!res.ok) throw new Error("HTTP " + res.status);
   const html = await res.text();
