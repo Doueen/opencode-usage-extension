@@ -47,7 +47,12 @@ body{
   width:340px;background:var(--bg);background-attachment:fixed;
   color:var(--ink);font-family:var(--font);font-size:var(--fs);line-height:1.5;
   transition:background .3s,color .3s;
+  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--c1) 40%,transparent) transparent;
 }
+body::-webkit-scrollbar{width:4px}
+body::-webkit-scrollbar-track{background:transparent}
+body::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--c1) 45%,transparent);border-radius:2px}
+body::-webkit-scrollbar-thumb:hover{background:var(--c1)}
 .wrap{padding:14px;position:relative}
 h1{font-size:13px;letter-spacing:2px;color:var(--c1);display:flex;align-items:center;gap:8px}
 h1::before{content:"▮"}
@@ -137,7 +142,12 @@ footer{margin-top:6px;color:var(--dim);font-size:9px;text-align:center;padding-b
   width:290px;max-width:92%;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);box-shadow:var(--glow);padding:14px;
   max-height:calc(100vh - 24px);overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--c1) 40%,transparent) transparent;
 }
+.modal::-webkit-scrollbar{width:4px}
+.modal::-webkit-scrollbar-track{background:transparent}
+.modal::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--c1) 45%,transparent);border-radius:2px}
+.modal::-webkit-scrollbar-thumb:hover{background:var(--c1)}
 .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .modal-head span{font-size:12px;letter-spacing:2px;color:var(--c1);font-weight:700}
 .modal-x{background:transparent;border:none;color:var(--dim);font-size:14px;cursor:pointer;padding:2px 6px}
