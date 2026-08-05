@@ -11,12 +11,23 @@ async function getWsId() {
   return (oc_wsid || "").trim();
 }
 
-/* ── opencode 配额（fetch 自动携带官网登录态 cookie）── */
+/* 通过 chrome.cookies 读取 opencode 登录态（SW fetch 不带 cookie，必须手动附加） */
+async function getAuthCookie() {
+  const cookies = await chrome.cookies.getAll({ domain: "opencode.ai" });
+  return cookies.map(c => c.name + "=" + c.value).join("; ");
+}
+
+/* ── opencode 配额 ── */
 async function fetchQuota() {
   const wsId = await getWsId();
   if (!wsId) throw new Error("no_wsid");
   const wsUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go";
-  const res = await fetch(wsUrl, { credentials: "include" });
+  const cookie = await getAuthCookie();
+  if (!cookie) throw new Error("not_logged_in");
+  const res = await fetch(wsUrl, {
+    credentials: "omit",
+    headers: { "Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
+  });
   if (res.status === 302 || res.status === 401 || res.status === 403) throw new Error("not_logged_in");
   if (!res.ok) throw new Error("HTTP " + res.status);
   const html = await res.text();
@@ -146,6 +157,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg.type === "get_badge") {
     chrome.storage.local.get("oc_badge").then(d => sendResponse(d.oc_badge || "rolling"));
+    return true;
+  }
+  /* 自动检测：从当前活动标签页的 opencode URL 提取工作区 ID */
+  if (msg.type === "detect_ws") {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(tabs => {
+      const tab = tabs[0];
+      const url = tab && tab.url ? tab.url : "";
+      const m = url.match(/opencode\.ai\/workspace\/(wrk_[A-Za-z0-9]+)/);
+      sendResponse({ found: !!m, wsid: m ? m[1] : null, url });
+    });
     return true;
   }
 });

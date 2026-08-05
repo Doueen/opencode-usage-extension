@@ -65,6 +65,24 @@ function saveWs() {
 }
 $("ws-save").onclick = saveWs;
 $("ws-input").addEventListener("keydown", e => { if (e.key === "Enter") saveWs(); });
+/* 自动检测：从当前 opencode 标签页提取 */
+$("ws-detect").onclick = () => {
+  $("ws-detect").textContent = "检测中...";
+  chrome.runtime.sendMessage({ type: "detect_ws" }, (resp) => {
+    if (resp && resp.found && resp.wsid) {
+      chrome.storage.local.set({ oc_wsid: resp.wsid }, () => {
+        $("ws-input").placeholder = "已保存: " + resp.wsid;
+        updateGoLink(resp.wsid);
+        refresh();
+        $("ws-detect").textContent = "✓ 已自动填入 " + resp.wsid.slice(0, 12) + "...";
+        setTimeout(() => { $("ws-detect").textContent = "自动检测"; }, 2500);
+      });
+    } else {
+      $("ws-detect").textContent = "未找到，请先打开 opencode.ai 页面";
+      setTimeout(() => { $("ws-detect").textContent = "自动检测"; }, 2500);
+    }
+  });
+};
 function loadWs() {
   chrome.storage.local.get("oc_wsid", ({ oc_wsid }) => {
     if (oc_wsid) $("ws-input").placeholder = "当前: " + oc_wsid;

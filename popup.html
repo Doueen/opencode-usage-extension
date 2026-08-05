@@ -136,6 +136,7 @@ footer{margin-top:6px;color:var(--dim);font-size:9px;text-align:center;padding-b
 .modal{
   width:290px;max-width:92%;background:var(--panel);border:1px solid var(--line);
   border-radius:var(--radius);box-shadow:var(--glow);padding:14px;
+  max-height:calc(100vh - 24px);overflow-y:auto;
 }
 .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .modal-head span{font-size:12px;letter-spacing:2px;color:var(--c1);font-weight:700}
@@ -300,7 +301,10 @@ body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2
         <input id="ws-input" placeholder="wrk_... 工作区 ID">
         <button id="ws-save">保存</button>
       </div>
-      <div class="hint" style="margin-top:6px">在 opencode.ai 官网页面 URL 中可找到（/workspace/&lt;ID&gt;/）。用于读取你的配额。</div>
+      <div class="freq-custom" style="margin-top:6px">
+        <button id="ws-detect" style="flex:1;padding:7px 8px">✨ 自动检测（从当前 opencode 页面）</button>
+      </div>
+      <div class="hint" style="margin-top:6px">先打开 opencode.ai 官网页面，再点「自动检测」可一键填入。也可在官网 URL 中手动查找（/workspace/&lt;ID&gt;/）。</div>
     </div>
 
     <div class="set-group">
