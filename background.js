@@ -51,6 +51,21 @@ async function fetchQuotaViaContent(wsId) {
   return null;
 }
 
+/* 自动打开 opencode 标签页承载 content script（首次抓取时） */
+async function ensureContentTab(wsId) {
+  const tabs = await chrome.tabs.query({ url: ["https://opencode.ai/*", "https://*.opencode.ai/*"] });
+  if (tabs.length) return true;  // 已有标签页
+  try {
+    const url = wsId
+      ? "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go"
+      : "https://opencode.ai/";
+    await chrome.tabs.create({ url, active: false });
+    // 等 content script 注入
+    await new Promise(r => setTimeout(r, 3000));
+    return true;
+  } catch (e) { return false; }
+}
+
 /* ── 直接 fetch（回退方案，可能受 CORS 限制）── */
 async function fetchQuotaDirect(wsId) {
   const wsUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go";
@@ -95,10 +110,18 @@ async function fetchQuota() {
   const wsId = await getWsId();
   if (!wsId) throw new Error("no_wsid");
 
-  const viaContent = await fetchQuotaViaContent(wsId);
+  // 尝试1：现有 content script 标签页
+  let viaContent = await fetchQuotaViaContent(wsId);
   if (viaContent) return viaContent;
 
-  // content script 不可用时（无打开的开标签页）回退直接 fetch
+  // 尝试2：没有 opencode 标签页 → 自动开一个后台标签再试
+  const opened = await ensureContentTab(wsId);
+  if (opened) {
+    viaContent = await fetchQuotaViaContent(wsId);
+    if (viaContent) return viaContent;
+  }
+
+  // 尝试3：content script 不可用时回退直接 fetch
   return await fetchQuotaDirect(wsId);
 }
 
