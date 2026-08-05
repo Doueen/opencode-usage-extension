@@ -39,10 +39,20 @@ async function getAuthCookie() {
   return joined;
 }
 
-/* ── opencode 配额 ── */
-async function fetchQuota() {
-  const wsId = await getWsId();
-  if (!wsId) throw new Error("no_wsid");
+/* ── 通过 content script 同源抓取（推荐：无 CORS、天然带登录态）── */
+async function fetchQuotaViaContent(wsId) {
+  const tabs = await chrome.tabs.query({ url: ["https://opencode.ai/*", "https://*.opencode.ai/*"] });
+  for (const tab of tabs) {
+    try {
+      const resp = await chrome.tabs.sendMessage(tab.id, { type: "oc_fetch_quota", wsid: wsId });
+      if (resp && resp.ok && resp.quota) return resp.quota;
+    } catch (e) { /* 该标签页无 content script，继续下一个 */ }
+  }
+  return null;
+}
+
+/* ── 直接 fetch（回退方案，可能受 CORS 限制）── */
+async function fetchQuotaDirect(wsId) {
   const wsUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go";
 
   // 尝试1：手动附加 cookie 头
@@ -54,7 +64,7 @@ async function fetchQuota() {
       headers: { "Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
     });
   }
-  // 尝试2：回退 credentials include（扩展对 host_permissions 域可能自动带 cookie）
+  // 尝试2：回退 credentials include
   if (!res || res.status === 302 || res.status === 401 || res.status === 403) {
     const res2 = await fetch(wsUrl, { credentials: "include" }).catch(() => null);
     if (res2 && res2.ok) res = res2;
@@ -69,20 +79,27 @@ async function fetchQuota() {
 
   const parseUsage = (kind) => {
     const m = html.match(new RegExp(kind + 'Usage:\\$R\\[\\d+\\]=\\{status:"[a-z]+",resetInSec:(\\d+),usagePercent:(\\d+)\\}'));
-    return m ? { resetInSec: +m[1], usagePercent: +m[2] } : null;
+    return m ? { resetInSec: parseInt(m[1]), usagePercent: parseInt(m[2]) } : null;
   };
+  const rolling = parseUsage("rolling");
+  if (!rolling) throw new Error("parse_failed");
+  const weekly = parseUsage("weekly");
+  const monthly = parseUsage("monthly");
+  const wsName = (html.match(/workspaceName:"([^"]+)"/) || [])[1] || "";
+  const plan = (html.match(/planName:"([^"]+)"/) || [])[1] || "";
+  return { rolling, weekly, monthly, workspaceName: wsName, plan, fetchedAt: Date.now() };
+}
 
-  const quota = {
-    rolling: parseUsage("rolling"),
-    weekly: parseUsage("weekly"),
-    monthly: parseUsage("monthly"),
-    fetchedAt: Date.now(),
-  };
-  const wm = html.match(/name:"([^"]+)",slug:null/);
-  if (wm) quota.workspaceName = wm[1];
-  const pm = html.match(/paymentMethodType:"([a-z]+)"/);
-  if (pm) quota.paymentMethod = pm[1];
-  return quota;
+/* ── opencode 配额（content script 优先）── */
+async function fetchQuota() {
+  const wsId = await getWsId();
+  if (!wsId) throw new Error("no_wsid");
+
+  const viaContent = await fetchQuotaViaContent(wsId);
+  if (viaContent) return viaContent;
+
+  // content script 不可用时（无打开的开标签页）回退直接 fetch
+  return await fetchQuotaDirect(wsId);
 }
 
 /* ── DeepSeek 余额 ── */
