@@ -3,7 +3,7 @@
   "name": "OpenCode 用量监控",
   "version": "1.0.0",
   "description": "极简版：查看 opencode Go 订阅配额与 DeepSeek 余额（30秒自动刷新）",
-  "permissions": ["alarms", "storage", "cookies", "tabs"],
+  "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [
     "https://opencode.ai/*",
     "https://*.opencode.ai/*",
