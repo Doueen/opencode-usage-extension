@@ -11,34 +11,6 @@ async function getWsId() {
   return (oc_wsid || "").trim();
 }
 
-/* 通过 chrome.cookies 读取 opencode 登录态（SW fetch 不带 cookie，必须手动附加） */
-async function getAuthCookie() {
-  let cookies = [];
-  // 策略1：子域通配（匹配 .opencode.ai 及其所有子域）
-  try {
-    cookies = await chrome.cookies.getAll({ domain: ".opencode.ai" });
-  } catch (e) { /* 权限不足时忽略 */ }
-  // 策略2：精确站点（auth.opencode.ai 是登录域）
-  if (!cookies.length) {
-    try {
-      cookies = await chrome.cookies.getAll({ url: "https://opencode.ai/" });
-      if (!cookies.some(c => c.domain.includes("opencode"))) {
-        const authCs = await chrome.cookies.getAll({ url: "https://auth.opencode.ai/" });
-        cookies = cookies.concat(authCs);
-      }
-    } catch (e) { /* 忽略 */ }
-  }
-  // 过滤出有值的 auth/session cookie
-  const relevant = cookies.filter(c => c.value && (c.name === "auth" || c.name.includes("session") || c.name.includes("token")));
-  const source = relevant.length ? relevant : cookies;
-  const joined = source.map(c => c.name + "=" + c.value).join("; ");
-  // 调试：记录是否拿到 auth cookie
-  if (!source.some(c => c.name === "auth")) {
-    console.warn("[oc-usage] 未找到 auth cookie，拿到:", source.map(c => c.name).join(",") || "无");
-  }
-  return joined;
-}
-
 /* ── 通过 content script 同源抓取（推荐：无 CORS、天然带登录态）── */
 async function fetchQuotaViaContent(wsId) {
   const tabs = await chrome.tabs.query({ url: ["https://opencode.ai/*", "https://*.opencode.ai/*"] });
@@ -66,24 +38,30 @@ async function ensureContentTab(wsId) {
   } catch (e) { return false; }
 }
 
-/* ── 直接 fetch（回退方案，可能受 CORS 限制）── */
-async function fetchQuotaDirect(wsId) {
+/* ── opencode 配额 ──
+ * 主路径：credentials include（MV3 扩展对 host_permissions 域会自动携带 cookie，v1.0.0 实测可用）
+ * 兜底：content script 同源抓取（无 CORS 问题）
+ */
+async function fetchQuota() {
+  const wsId = await getWsId();
+  if (!wsId) throw new Error("no_wsid");
   const wsUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/go";
 
-  // 尝试1：手动附加 cookie 头
-  const cookie = await getAuthCookie();
-  let res = null;
-  if (cookie) {
-    res = await fetch(wsUrl, {
-      credentials: "omit",
-      headers: { "Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
-    });
-  }
-  // 尝试2：回退 credentials include
+  // 主路径：简单 fetch + credentials include
+  let res = await fetch(wsUrl, { credentials: "include" }).catch(() => null);
+
+  // 兜底：主路径失败（302/网络）时走 content script 同源抓取
   if (!res || res.status === 302 || res.status === 401 || res.status === 403) {
-    const res2 = await fetch(wsUrl, { credentials: "include" }).catch(() => null);
-    if (res2 && res2.ok) res = res2;
+    const viaContent = await fetchQuotaViaContent(wsId);
+    if (viaContent) return viaContent;
+    // content script 也没有 → 尝试自动开标签页
+    const opened = await ensureContentTab(wsId);
+    if (opened) {
+      const retry = await fetchQuotaViaContent(wsId);
+      if (retry) return retry;
+    }
   }
+
   if (!res) throw new Error("not_logged_in");
   if (res.status === 302 || res.status === 401 || res.status === 403) throw new Error("not_logged_in");
   if (!res.ok) throw new Error("HTTP " + res.status);
@@ -103,26 +81,6 @@ async function fetchQuotaDirect(wsId) {
   const wsName = (html.match(/workspaceName:"([^"]+)"/) || [])[1] || "";
   const plan = (html.match(/planName:"([^"]+)"/) || [])[1] || "";
   return { rolling, weekly, monthly, workspaceName: wsName, plan, fetchedAt: Date.now() };
-}
-
-/* ── opencode 配额（content script 优先）── */
-async function fetchQuota() {
-  const wsId = await getWsId();
-  if (!wsId) throw new Error("no_wsid");
-
-  // 尝试1：现有 content script 标签页
-  let viaContent = await fetchQuotaViaContent(wsId);
-  if (viaContent) return viaContent;
-
-  // 尝试2：没有 opencode 标签页 → 自动开一个后台标签再试
-  const opened = await ensureContentTab(wsId);
-  if (opened) {
-    viaContent = await fetchQuotaViaContent(wsId);
-    if (viaContent) return viaContent;
-  }
-
-  // 尝试3：content script 不可用时回退直接 fetch
-  return await fetchQuotaDirect(wsId);
 }
 
 /* ── DeepSeek 余额 ── */
