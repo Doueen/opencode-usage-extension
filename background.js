@@ -104,9 +104,14 @@ async function refresh() {
   try { out.quota = await fetchQuota(); }
   catch (e) { out.lastError = "配额: " + e.message; }
   try {
-    const { ds_key } = await chrome.storage.local.get("ds_key");
-    out.balance = await fetchBalance(ds_key);
-    if (!ds_key) out.lastError = (out.lastError ? out.lastError + "；" : "") + "未设置 DeepSeek Key";
+    const { ds_key, ds_enabled } = await chrome.storage.local.get(["ds_key", "ds_enabled"]);
+    if (ds_enabled === false) {
+      // 用户关闭了 DeepSeek 余额显示：跳过抓取
+      out.balance = { disabled: true };
+    } else {
+      out.balance = await fetchBalance(ds_key);
+      if (!ds_key) out.lastError = (out.lastError ? out.lastError + "；" : "") + "未设置 DeepSeek Key";
+    }
   } catch (e) { out.lastError = (out.lastError ? out.lastError + "；" : "") + "余额: " + e.message; }
   await chrome.storage.local.set({ oc_usage: out });
   if (out.quota && out.quota.monthly && typeof out.quota.monthly.usagePercent === "number") {

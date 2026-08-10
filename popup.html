@@ -138,6 +138,9 @@ h1::before{content:"▮"}
 }
 .keyrow button:hover{background:color-mix(in srgb,var(--c1) 15%,transparent)}
 
+.sw-row{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--ink);font-size:11px;cursor:pointer;user-select:none}
+.sw-row input{width:auto;accent-color:var(--c1);cursor:pointer}
+
 footer{margin-top:6px;color:var(--dim);font-size:9px;text-align:center;padding-bottom:2px}
 
 /* ═══════════ 设置弹出框 ═══════════ */
@@ -270,8 +273,10 @@ body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2
 
     <div class="divider"></div>
 
-    <div class="sec-title"><span>DEEPSEEK 余额</span><span class="st" id="ds-st"></span></div>
-    <div id="ds-body"><div class="hint">获取中...</div></div>
+    <div id="ds-card">
+      <div class="sec-title"><span>DEEPSEEK 余额</span><span class="st" id="ds-st"></span></div>
+      <div id="ds-body"><div class="hint">获取中...</div></div>
+    </div>
   </div>
 
   <div id="errbox"></div>
@@ -335,6 +340,9 @@ body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2
         <input id="key-input" type="password" placeholder="sk-... 留空则不启用余额显示">
         <button id="key-save">保存</button>
       </div>
+      <label class="sw-row" title="关闭后不再请求 DeepSeek 余额接口">
+        <input type="checkbox" id="ds-enable" checked> 显示 DeepSeek 余额
+      </label>
       <div class="hint" style="margin-top:6px">Key 仅保存在本浏览器，仅用于调用官方余额 API，不会上传到任何服务器。</div>
     </div>
 

@@ -223,8 +223,11 @@ function render(data) {
     $("status-dot").classList.add("err");
   }
   renderQuota(data ? data.quota : null);
-  chrome.storage.local.get("ds_key").then(({ ds_key }) => {
-    renderBalance(data ? data.balance : null, !!ds_key);
+  chrome.storage.local.get(["ds_key", "ds_enabled"]).then(({ ds_key, ds_enabled }) => {
+    const show = ds_enabled !== false; // 默认开启
+    const card = $("ds-card");
+    if (card) card.style.display = show ? "" : "none";
+    if (show) renderBalance(data ? data.balance : null, !!ds_key);
   });
   const err = friendlyError(data && data.lastError);
   $("errbox").innerHTML = err;
@@ -254,6 +257,19 @@ function updateGoLink(wsId) {
 
 /* 恢复上次主题 */
 chrome.storage.local.get("oc_theme", ({ oc_theme }) => applyTheme(oc_theme || "cyber"));
+
+/* ═══ DeepSeek 余额显示开关 ═══ */
+chrome.storage.local.get("ds_enabled", ({ ds_enabled }) => {
+  const sw = $("ds-enable");
+  if (sw) sw.checked = ds_enabled !== false;
+});
+$("ds-enable").addEventListener("change", e => {
+  chrome.storage.local.set({ ds_enabled: e.target.checked }).then(() => {
+    const card = $("ds-card");
+    if (card) card.style.display = e.target.checked ? "" : "none";
+    refresh();
+  });
+});
 
 /* 恢复 Workspace ID */
 loadWs();
