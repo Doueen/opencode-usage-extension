@@ -109,7 +109,9 @@ async function refresh() {
     if (!ds_key) out.lastError = (out.lastError ? out.lastError + "；" : "") + "未设置 DeepSeek Key";
   } catch (e) { out.lastError = (out.lastError ? out.lastError + "；" : "") + "余额: " + e.message; }
   await chrome.storage.local.set({ oc_usage: out });
-  if (out.quota && out.quota.monthly) await recordDailySample(out.quota.monthly);
+  if (out.quota && out.quota.monthly && typeof out.quota.monthly.usagePercent === "number") {
+    await recordDailySample(out.quota.monthly.usagePercent);
+  }
   updateBadge(out.quota);
   return out;
 }

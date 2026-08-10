@@ -16,7 +16,16 @@
     const theme = THEMES[oc_theme] || THEMES.glass;
     applyTheme(theme);
 
-    const trend = Array.isArray(oc_monthly_trend) ? oc_monthly_trend : [];
+    const trendRaw = Array.isArray(oc_monthly_trend) ? oc_monthly_trend : [];
+    // 防御：过滤掉 monthly 不是数字的脏记录（曾误存整个 usage 对象），并兼容对象形态
+    const trend = trendRaw
+      .map(d => ({
+        date: d.date,
+        month: d.month || "",
+        monthly: typeof d.monthly === "number" ? d.monthly
+               : (d.monthly && typeof d.monthly.usagePercent === "number" ? d.monthly.usagePercent : NaN),
+      }))
+      .filter(d => Number.isFinite(d.monthly));
     if (trend.length < 1) { $("empty").style.display = "block"; return; }
 
     // 月份标签
