@@ -109,8 +109,34 @@ async function refresh() {
     if (!ds_key) out.lastError = (out.lastError ? out.lastError + "；" : "") + "未设置 DeepSeek Key";
   } catch (e) { out.lastError = (out.lastError ? out.lastError + "；" : "") + "余额: " + e.message; }
   await chrome.storage.local.set({ oc_usage: out });
+  if (out.quota && out.quota.monthly) await recordDailySample(out.quota.monthly);
   updateBadge(out.quota);
   return out;
+}
+
+/* ── 月度用量每日采样（每次刷新覆盖当日值）──
+ * oc_monthly_trend: [{date:"08-05", monthly:28}, ...] 当月逐日
+ */
+async function recordDailySample(monthlyPercent) {
+  try {
+    const { oc_monthly_trend } = await chrome.storage.local.get("oc_monthly_trend");
+    const trend = Array.isArray(oc_monthly_trend) ? oc_monthly_trend : [];
+    const now = new Date();
+    const today = String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    const monthKey = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    // 跨月清空
+    const filtered = trend.filter(d => (d.month || "") === monthKey);
+    // 同日覆盖
+    const idx = filtered.findIndex(d => d.date === today);
+    if (idx >= 0) {
+      filtered[idx].monthly = monthlyPercent;
+      filtered[idx].month = monthKey;
+    } else {
+      filtered.push({ date: today, monthly: monthlyPercent, month: monthKey });
+    }
+    filtered.sort((a, b) => a.date.localeCompare(b.date));
+    await chrome.storage.local.set({ oc_monthly_trend: filtered });
+  } catch (e) { /* 采样失败不影响主流程 */ }
 }
 
 /* ── 工具栏角标：可配置显示内容 ──

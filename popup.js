@@ -230,6 +230,12 @@ function render(data) {
   $("errbox").innerHTML = err;
 }
 
+/* ═══ 月度趋势入口 ═══ */
+$("trend-link").addEventListener("click", e => {
+  e.preventDefault();
+  chrome.tabs.create({ url: chrome.runtime.getURL("trend.html") });
+});
+
 function refresh() {
   chrome.runtime.sendMessage({ type: "refresh" }, render);
 }

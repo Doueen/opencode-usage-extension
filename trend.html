@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>OpenCode 月度用量趋势</title>
+<style>
+:root{
+  --bg:#0a0e1a;--bg2:#101630;--panel:#121a33;--panel2:#1a2340;
+  --ink:#dbe4ff;--dim:#7c8ab5;--line:#233055;
+  --c1:#00e5ff;--c2:#ff2e88;--ok:#00ff9c;--warn:#ffb300;--danger:#ff3b3b;
+  --radius:10px;--glow:0 0 12px rgba(0,229,255,.25);--blur:blur(12px);
+  --font:'JetBrains Mono','Cascadia Code',Consolas,monospace;
+  --mono:'JetBrains Mono',Consolas,monospace;--fs:12px;
+}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:var(--fs);min-height:100vh}
+.wrap{max-width:560px;margin:0 auto;padding:20px}
+h1{font-size:15px;letter-spacing:2px;color:var(--c1);display:flex;align-items:center;gap:8px;margin:0 0 4px}
+h1::before{content:"▮"}
+.sub{color:var(--dim);font-size:10px;margin-bottom:16px}
+.head-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.month-tag{font-size:10px;color:var(--c1);border:1px solid var(--line);padding:3px 10px;border-radius:20px;background:var(--bg2)}
+
+/* 预测卡 */
+.pred-card{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.pred{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;text-align:center}
+.pred .lbl{font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:4px}
+.pred .val{font-size:16px;font-weight:700}
+.pred .val small{font-size:10px;color:var(--dim)}
+.pred.ok .val{color:var(--ok)}
+.pred.warn .val{color:var(--warn)}
+.pred.danger .val{color:var(--danger)}
+
+/* 图表卡 */
+.chart-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--glow)}
+.chart-title{font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:10px;display:flex;justify-content:space-between}
+.chart-title b{color:var(--ink)}
+svg{width:100%;height:auto;display:block}
+.axis{stroke:var(--line);stroke-width:1}
+.grid{stroke:var(--line);stroke-width:1;stroke-dasharray:3 3;opacity:.4}
+.line{fill:none;stroke:var(--c1);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.line.danger{stroke:var(--danger)}
+.area{fill:url(#grad);opacity:.15}
+.dot{fill:var(--c1);stroke:var(--bg);stroke-width:2}
+.dot.last{fill:var(--c1);stroke:var(--bg);stroke-width:2;r:4}
+.axis-lbl{fill:var(--dim);font-size:9px;font-family:var(--mono)}
+.day-lbl{fill:var(--dim);font-size:8px;font-family:var(--mono)}
+.tooltip{position:absolute;background:var(--bg2);border:1px solid var(--c1);border-radius:6px;padding:6px 10px;font-size:10px;pointer-events:none;display:none;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+
+/* 空状态 */
+.empty{text-align:center;padding:40px 0;color:var(--dim)}
+.empty .big{font-size:30px;margin-bottom:10px}
+.empty .hint{font-size:10px;line-height:1.8}
+
+/* 说明 */
+.foot{margin-top:14px;font-size:9px;color:var(--dim);line-height:1.8;text-align:center}
+.back{display:inline-block;margin-top:12px;color:var(--c1);text-decoration:none;font-size:11px;border:1px solid var(--line);padding:5px 14px;border-radius:20px}
+.back:hover{border-color:var(--c1)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head-row">
+    <div>
+      <h1>OPENCODE 月度用量趋势</h1>
+      <div class="sub">MONTHLY USAGE TREND · 每日采样 · 每次刷新更新当日值</div>
+    </div>
+    <span class="month-tag" id="month-tag">--</span>
+  </div>
+
+  <div id="pred-row" class="pred-card" style="display:none">
+    <div class="pred" id="p-current"><div class="lbl">当前用量</div><div class="val">--</div></div>
+    <div class="pred" id="p-daily"><div class="lbl">日均消耗</div><div class="val">--</div></div>
+    <div class="pred" id="p-eom"><div class="lbl">预测月底</div><div class="val">--</div></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title"><span>月度用量 <b id="chart-range"></b></span><span>单位：%</span></div>
+    <div id="chart-box" style="position:relative">
+      <svg id="chart" viewBox="0 0 520 220" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#00e5ff"/>
+            <stop offset="100%" stop-color="#00e5ff" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </div>
+
+  <div id="empty" class="empty" style="display:none">
+    <div class="big">📈</div>
+    <div class="hint">还没有足够的采样数据。<br>插件每次刷新会记录当日的月度用量，<br>通常使用 2-3 天后即可看到趋势曲线。</div>
+  </div>
+
+  <div class="foot">
+    数据来源：opencode.ai 官网月度配额 · 每日仅保留最后一条采样值<br>
+    预测 = 当前值 + 日均消耗 × 剩余天数（线性外推）
+  </div>
+  <div style="text-align:center"><a class="back" href="#" id="btn-back">← 返回插件</a></div>
+</div>
+<script src="trend.js"></script>
+</body>
+</html>

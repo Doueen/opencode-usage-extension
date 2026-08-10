@@ -107,6 +107,15 @@ h1::before{content:"▮"}
 
 /* ═══════════ 官网入口（小按钮）═══════════ */
 #go-site{display:block;text-decoration:none;margin-bottom:10px}
+#trend-link{display:block;text-decoration:none;margin-top:8px}
+.trend-btn{
+  display:flex;justify-content:space-between;align-items:center;
+  background:var(--bg2);border:1px dashed var(--line);border-radius:var(--radius);
+  padding:8px 12px;color:var(--ink);font-family:var(--font);font-size:11px;
+  transition:all .2s;
+}
+.trend-btn b{color:var(--c1);font-size:10px}
+.trend-btn:hover{border-color:var(--c1);background:color-mix(in srgb,var(--c1) 8%,transparent);box-shadow:var(--glow)}
 .go-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;
   border:1px solid var(--line);background:var(--panel);border-radius:var(--radius);
@@ -255,6 +264,9 @@ body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2
   <div class="dash">
     <div class="sec-title"><span>GO 订阅配额</span><span class="st" id="q-ws"></span></div>
     <div id="q-body"><div class="hint">获取中...</div></div>
+    <a id="trend-link" href="#" title="月度用量趋势">
+      <div class="trend-btn">📈 月度用量趋势 <b>查看</b></div>
+    </a>
 
     <div class="divider"></div>
 
