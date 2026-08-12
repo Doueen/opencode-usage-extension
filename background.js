@@ -132,20 +132,21 @@ async function recordDailySample(monthlyPercent) {
     const now = new Date();
     const today = String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const monthKey = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-    // 只保留最近 13 个有数据的月份（防存储无限增长）
-    const months = [...new Set(trend.map(d => d.month).filter(Boolean))].sort().slice(-13);
-    const keep = new Set(months);
-    const filtered = trend.filter(d => !d.month || keep.has(d.month));
     // 同月同日覆盖（当日只留一条采样）
-    const idx = filtered.findIndex(d => d.month === monthKey && d.date === today);
+    const idx = trend.findIndex(d => d.month === monthKey && d.date === today);
+    let next;
     if (idx >= 0) {
-      filtered[idx].monthly = monthlyPercent;
-      filtered[idx].month = monthKey;
+      next = trend.slice();
+      next[idx] = { ...next[idx], monthly: monthlyPercent, month: monthKey };
     } else {
-      filtered.push({ date: today, monthly: monthlyPercent, month: monthKey });
+      next = [...trend, { date: today, monthly: monthlyPercent, month: monthKey }];
     }
-    filtered.sort((a, b) => (a.month + "-" + a.date).localeCompare(b.month + "-" + b.date));
-    await chrome.storage.local.set({ oc_monthly_trend: filtered });
+    // 写入后再截断：只保留最近 13 个有数据的月份（防存储无限增长）
+    const months = [...new Set(next.map(d => d.month).filter(Boolean))].sort().slice(-13);
+    const keep = new Set(months);
+    next = next.filter(d => !d.month || keep.has(d.month));
+    next.sort((a, b) => (a.month + "-" + a.date).localeCompare(b.month + "-" + b.date));
+    await chrome.storage.local.set({ oc_monthly_trend: next });
   } catch (e) { /* 采样失败不影响主流程 */ }
 }
 
