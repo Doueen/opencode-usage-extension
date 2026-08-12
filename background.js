@@ -122,7 +122,8 @@ async function refresh() {
 }
 
 /* ── 月度用量每日采样（每次刷新覆盖当日值）──
- * oc_monthly_trend: [{date:"08-05", monthly:28}, ...] 当月逐日
+ * oc_monthly_trend: [{date:"08-05", monthly:28, month:"2026-08"}, ...]
+ * 保留最近 13 个月（跨月不清空），供趋势图按月周期绘制
  */
 async function recordDailySample(monthlyPercent) {
   try {
@@ -131,17 +132,19 @@ async function recordDailySample(monthlyPercent) {
     const now = new Date();
     const today = String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
     const monthKey = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
-    // 跨月清空
-    const filtered = trend.filter(d => (d.month || "") === monthKey);
-    // 同日覆盖
-    const idx = filtered.findIndex(d => d.date === today);
+    // 只保留最近 13 个有数据的月份（防存储无限增长）
+    const months = [...new Set(trend.map(d => d.month).filter(Boolean))].sort().slice(-13);
+    const keep = new Set(months);
+    const filtered = trend.filter(d => !d.month || keep.has(d.month));
+    // 同月同日覆盖（当日只留一条采样）
+    const idx = filtered.findIndex(d => d.month === monthKey && d.date === today);
     if (idx >= 0) {
       filtered[idx].monthly = monthlyPercent;
       filtered[idx].month = monthKey;
     } else {
       filtered.push({ date: today, monthly: monthlyPercent, month: monthKey });
     }
-    filtered.sort((a, b) => a.date.localeCompare(b.date));
+    filtered.sort((a, b) => (a.month + "-" + a.date).localeCompare(b.month + "-" + b.date));
     await chrome.storage.local.set({ oc_monthly_trend: filtered });
   } catch (e) { /* 采样失败不影响主流程 */ }
 }

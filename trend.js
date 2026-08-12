@@ -1,4 +1,7 @@
-/* 月度用量趋势页：读采样数据 → SVG 折线 → 预测 */
+/* 月度用量趋势页：读采样数据 → SVG 折线 → 预测
+ * 月周期视图：≥2 个月数据时，X 轴按月绘制各月用量（该月最近一次采样）
+ * 单月视图：只有 1 个月数据时，退化为当月逐日曲线
+ */
 (() => {
   const $ = id => document.getElementById(id);
 
@@ -25,18 +28,21 @@
         monthly: typeof d.monthly === "number" ? d.monthly
                : (d.monthly && typeof d.monthly.usagePercent === "number" ? d.monthly.usagePercent : NaN),
       }))
-      .filter(d => Number.isFinite(d.monthly));
+      .filter(d => Number.isFinite(d.monthly) && d.month);
     if (trend.length < 1) { $("empty").style.display = "block"; return; }
 
-    // 月份标签
-    const month = trend[0].month || "";
-    $("month-tag").textContent = month ? month.replace("-", " 年 ") + " 月" : "当月";
+    // 按月份分组（升序）
+    const months = [...new Set(trend.map(d => d.month))].sort();
+    const curMonth = months[months.length - 1];
+    $("month-tag").textContent = curMonth.replace("-", " 年 ") + " 月";
 
-    // 预测计算
+    // 当月数据（用于预测卡）
+    const curRows = trend.filter(d => d.month === curMonth).sort((a, b) => a.date.localeCompare(b.date));
+    const current = curRows[curRows.length - 1].monthly;
+
+    // 预测计算（当月线性外推）
     const now = new Date();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const current = trend[trend.length - 1].monthly;
-    // 用首条记录的日期推断已过天数（用当天日期更准）
+    const daysInMonth = daysInOf(curMonth, now);
     const today = now.getDate();
     const elapsed = Math.max(today, 1);
     const daily = current / elapsed;
@@ -44,7 +50,17 @@
     const eom = Math.round(current + daily * remain);
 
     renderPred(current, daily, eom);
-    renderChart(trend, eom);
+
+    // 月周期视图：≥2 个月；单月退化为当月逐日曲线
+    if (months.length >= 2) renderMonthly(trend, months);
+    else renderDaily(trend, curMonth, daysInMonth, eom);
+  }
+
+  /* 某个月份的天数（历史月份也正确，不依赖 now） */
+  function daysInOf(monthKey, now) {
+    const m = monthKey ? monthKey.match(/^(\d{4})-(\d{2})$/) : null;
+    if (m) return new Date(+m[1], +m[2], 0).getDate();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   }
 
   function applyTheme(t) {
@@ -65,7 +81,95 @@
     $("p-current").className = "pred " + (current < 80 ? "ok" : current <= 100 ? "warn" : "danger");
   }
 
-  function renderChart(trend, eom) {
+  /* ── 月周期视图：X 轴 = 月份，每月的点 = 该月最近一次采样 ── */
+  function renderMonthly(trend, months) {
+    const svg = $("chart");
+    const W = 520, H = 220, PAD_L = 40, PAD_R = 16, PAD_T = 14, PAD_B = 26;
+    const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
+
+    // 每月取最后一条采样（该月用量）
+    const pts = months.map(m => {
+      const rows = trend.filter(d => d.month === m).sort((a, b) => a.date.localeCompare(b.date));
+      return { month: m, value: rows[rows.length - 1].monthly, days: rows.length };
+    });
+
+    const now = new Date();
+    const curKey = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    const lastIsCur = pts[pts.length - 1].month === curKey;
+
+    const values = pts.map(p => p.value);
+    const maxV = Math.max(100, ...values);
+    const yMax = Math.ceil(maxV / 20) * 20; // 对齐 20% 刻度
+    const n = pts.length;
+
+    const xOf = i => PAD_L + (i / (n - 1)) * iw;
+    const yOf = v => PAD_T + ih - (v / yMax) * ih;
+
+    // 网格线 + Y 轴标签
+    let grid = "";
+    const steps = 5;
+    for (let i = 0; i <= steps; i++) {
+      const v = yMax / steps * i;
+      const y = yOf(v);
+      grid += `<line class="grid" x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}"/>`;
+      grid += `<text class="axis-lbl" x="${PAD_L - 6}" y="${y + 3}" text-anchor="end">${Math.round(v)}%</text>`;
+    }
+    // X 轴
+    grid += `<line class="axis" x1="${PAD_L}" y1="${PAD_T + ih}" x2="${W - PAD_R}" y2="${PAD_T + ih}"/>`;
+    // 月份刻度（≤8 个月全标；更多则隔月标，末尾两月必标）
+    const labelEvery = n <= 8 ? 1 : 2;
+    pts.forEach((p, i) => {
+      if (i % labelEvery === 0 || n - i <= 2) {
+        const lbl = parseInt(p.month.split("-")[1], 10) + "月";
+        grid += `<text class="day-lbl" x="${xOf(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${lbl}</text>`;
+      }
+    });
+
+    const danger = Math.max(...values) > 100;
+    const lineColor = danger ? "var(--danger)" : "var(--c1)";
+
+    // 折线 + 面积
+    const ptsStr = pts.map((p, i) => `${xOf(i).toFixed(1)},${yOf(p.value).toFixed(1)}`).join(" ");
+    const areaPts = `${ptsStr} ${xOf(n - 1).toFixed(1)},${PAD_T + ih} ${xOf(0).toFixed(1)},${PAD_T + ih}`;
+
+    // 当月点：高亮描边 + 「本月」小标注
+    let marks = "";
+    if (lastIsCur) {
+      const cx = xOf(n - 1), cy = yOf(pts[n - 1].value);
+      marks += `<circle class="dot last" cx="${cx}" cy="${cy}" r="4.5"/>`;
+      marks += `<text class="day-lbl" x="${cx}" y="${cy - 9}" text-anchor="middle" style="fill:var(--c1)">本月</text>`;
+    }
+
+    svg.innerHTML =
+      `<style>.line{stroke:${lineColor}}</style>` +
+      grid +
+      `<polygon class="area" points="${areaPts}"/>` +
+      `<polyline class="line" points="${ptsStr}"/>` +
+      pts.map((p, i) => `<circle class="dot" cx="${xOf(i).toFixed(1)}" cy="${yOf(p.value).toFixed(1)}" r="3"/>`).join("") +
+      marks +
+      pts.map((p, i) => `<circle data-month="${p.month}" data-val="${p.value}" data-days="${p.days}" cx="${xOf(i).toFixed(1)}" cy="${yOf(p.value).toFixed(1)}" r="9" fill="transparent" style="cursor:pointer"/>`).join("");
+
+    $("chart-range").textContent = `${pts[0].month} ~ ${pts[n - 1].month} · 近 ${n} 个月`;
+
+    // hover tooltip
+    const tip = $("tooltip");
+    const box = $("chart-box");
+    svg.querySelectorAll("[data-month]").forEach(c => {
+      c.addEventListener("mousemove", e => {
+        const rect = box.getBoundingClientRect();
+        tip.style.display = "block";
+        tip.style.left = (e.clientX - rect.left + 10) + "px";
+        tip.style.top = (e.clientY - rect.top - 10) + "px";
+        const ym = c.dataset.month.replace("-", " 年 ") + " 月";
+        const isCur = c.dataset.month === curKey;
+        tip.innerHTML = `<b>${ym}</b> · 月用量 ${c.dataset.val}%${isCur ? "（本月·进行中）" : ""}`;
+      });
+      c.addEventListener("mouseleave", () => tip.style.display = "none");
+    });
+  }
+
+  /* ── 单月视图：当月逐日曲线（原逻辑，X 按真实日期） ── */
+  function renderDaily(trend, monthKey, daysInMonth, eom) {
     const svg = $("chart");
     const W = 520, H = 220, PAD_L = 40, PAD_R = 16, PAD_T = 14, PAD_B = 26;
     const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
@@ -76,10 +180,6 @@
     const n = trend.length;
 
     // X 坐标：按日期在当月的位置（比均匀分布更真实）
-    const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const xOf = d => {
       const day = parseInt(d.date.split("-")[1], 10);
       return PAD_L + (day - 1) / (daysInMonth - 1) * iw;
