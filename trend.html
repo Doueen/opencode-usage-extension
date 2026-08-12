@@ -65,6 +65,7 @@ svg{width:100%;height:auto;display:block}
       <div class="sub">MONTHLY USAGE TREND · 月度周期视图 · 每日采样 · 跨月保留历史</div>
     </div>
     <span class="month-tag" id="month-tag">--</span>
+    <span class="month-tag" id="reset-tag" style="display:none;border-color:var(--c2);color:var(--c2)">--</span>
   </div>
 
   <div id="pred-row" class="pred-card" style="display:none">
@@ -96,7 +97,7 @@ svg{width:100%;height:auto;display:block}
   <div class="foot">
     数据来源：opencode.ai 官网月度配额 · 每日仅保留最后一条采样值 · 历史月份保留最近 13 个月<br>
     月周期视图：X 轴按月，各月数据点 = 该月最近一次采样；仅 1 个月数据时显示当月逐日曲线<br>
-    预测 = 当前值 + 日均消耗 × 剩余天数（线性外推，仅针对当月）
+    预测 = 当前值 + 日均消耗 × 重置倒计时剩余天数（官网 resetInSec，缺省按自然月剩余）
   </div>
   <div style="text-align:center"><a class="back" href="#" id="btn-back">← 返回插件</a></div>
 </div>

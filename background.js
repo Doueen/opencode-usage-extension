@@ -115,17 +115,19 @@ async function refresh() {
   } catch (e) { out.lastError = (out.lastError ? out.lastError + "；" : "") + "余额: " + e.message; }
   await chrome.storage.local.set({ oc_usage: out });
   if (out.quota && out.quota.monthly && typeof out.quota.monthly.usagePercent === "number") {
-    await recordDailySample(out.quota.monthly.usagePercent);
+    const r = out.quota.monthly;
+    await recordDailySample(r.usagePercent, typeof r.resetInSec === "number" ? r.resetInSec : null);
   }
   updateBadge(out.quota);
   return out;
 }
 
 /* ── 月度用量每日采样（每次刷新覆盖当日值）──
- * oc_monthly_trend: [{date:"08-05", monthly:28, month:"2026-08"}, ...]
+ * oc_monthly_trend: [{date:"08-05", monthly:28, month:"2026-08", resetInSec:1234567}, ...]
+ * resetInSec: 采样时距月度配额重置的剩余秒数（趋势图用它计算真实剩余/预测，适配任意重置规则）
  * 保留最近 13 个月（跨月不清空），供趋势图按月周期绘制
  */
-async function recordDailySample(monthlyPercent) {
+async function recordDailySample(monthlyPercent, resetInSec) {
   try {
     const { oc_monthly_trend } = await chrome.storage.local.get("oc_monthly_trend");
     const trend = Array.isArray(oc_monthly_trend) ? oc_monthly_trend : [];
@@ -138,8 +140,11 @@ async function recordDailySample(monthlyPercent) {
     if (idx >= 0) {
       next = trend.slice();
       next[idx] = { ...next[idx], monthly: monthlyPercent, month: monthKey };
+      if (resetInSec !== null && resetInSec !== undefined) next[idx].resetInSec = resetInSec;
     } else {
-      next = [...trend, { date: today, monthly: monthlyPercent, month: monthKey }];
+      const row = { date: today, monthly: monthlyPercent, month: monthKey };
+      if (resetInSec !== null && resetInSec !== undefined) row.resetInSec = resetInSec;
+      next = [...trend, row];
     }
     // 写入后再截断：只保留最近 13 个有数据的月份（防存储无限增长）
     const months = [...new Set(next.map(d => d.month).filter(Boolean))].sort().slice(-13);

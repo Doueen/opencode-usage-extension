@@ -27,6 +27,7 @@
         month: d.month || "",
         monthly: typeof d.monthly === "number" ? d.monthly
                : (d.monthly && typeof d.monthly.usagePercent === "number" ? d.monthly.usagePercent : NaN),
+        resetInSec: typeof d.resetInSec === "number" ? d.resetInSec : null, // 旧行无此字段
       }))
       .filter(d => Number.isFinite(d.monthly) && d.month);
     if (trend.length < 1) { $("empty").style.display = "block"; return; }
@@ -39,21 +40,27 @@
     // 当月数据（用于预测卡）
     const curRows = trend.filter(d => d.month === curMonth).sort((a, b) => a.date.localeCompare(b.date));
     const current = curRows[curRows.length - 1].monthly;
+    const lastReset = curRows[curRows.length - 1].resetInSec;
 
-    // 预测计算（当月线性外推）
+    // 预测：优先用官网重置倒计时（resetInSec），缺省退回自然月剩余天数
     const now = new Date();
     const daysInMonth = daysInOf(curMonth, now);
     const today = now.getDate();
     const elapsed = Math.max(today, 1);
     const daily = current / elapsed;
-    const remain = daysInMonth - today;
-    const eom = Math.round(current + daily * remain);
+    let remainDays;
+    if (typeof lastReset === "number" && lastReset > 0) {
+      remainDays = lastReset / 86400;
+    } else {
+      remainDays = daysInMonth - today;
+    }
+    const eom = Math.round(current + daily * remainDays);
 
-    renderPred(current, daily, eom);
+    renderPred(current, daily, eom, remainDays);
 
     // 月周期视图：≥2 个月；单月退化为当月逐日曲线
-    if (months.length >= 2) renderMonthly(trend, months);
-    else renderDaily(trend, curMonth, daysInMonth, eom);
+    if (months.length >= 2) renderMonthly(trend, months, remainDays);
+    else renderDaily(trend, curMonth, daysInMonth, eom, remainDays);
   }
 
   /* 某个月份的天数（历史月份也正确，不依赖 now） */
@@ -70,19 +77,25 @@
     r.setProperty("--panel", t.panel);
   }
 
-  function renderPred(current, daily, eom) {
+  function renderPred(current, daily, eom, remainDays) {
     $("pred-row").style.display = "grid";
     const fmt = n => (n > 999 ? Math.round(n) : Math.round(n * 10) / 10);
     $("p-current").innerHTML = `<div class="lbl">当前用量</div><div class="val">${fmt(current)}<small>%</small></div>`;
     $("p-daily").innerHTML = `<div class="lbl">日均消耗</div><div class="val">+${fmt(daily)}<small>%/天</small></div>`;
     const eomEl = $("p-eom");
-    eomEl.innerHTML = `<div class="lbl">预测月底</div><div class="val">${fmt(eom)}<small>%</small></div>`;
+    eomEl.innerHTML = `<div class="lbl">预测重置前</div><div class="val">${fmt(eom)}<small>%</small></div>`;
     eomEl.className = "pred " + (eom < 80 ? "ok" : eom <= 100 ? "warn" : "danger");
     $("p-current").className = "pred " + (current < 80 ? "ok" : current <= 100 ? "warn" : "danger");
+    // 重置倒计时标签（官网 resetInSec 驱动，适配任意重置规则）
+    if (typeof remainDays === "number" && Number.isFinite(remainDays) && remainDays > 0) {
+      const rd = remainDays >= 10 ? Math.round(remainDays) : Math.round(remainDays * 10) / 10;
+      $("reset-tag").textContent = "距重置 " + rd + " 天";
+      $("reset-tag").style.display = "inline-block";
+    }
   }
 
   /* ── 月周期视图：X 轴 = 月份，每月的点 = 该月最近一次采样 ── */
-  function renderMonthly(trend, months) {
+  function renderMonthly(trend, months, remainDays) {
     const svg = $("chart");
     const W = 520, H = 220, PAD_L = 40, PAD_R = 16, PAD_T = 14, PAD_B = 26;
     const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
@@ -154,6 +167,8 @@
     // hover tooltip
     const tip = $("tooltip");
     const box = $("chart-box");
+    const remainTxt = (typeof remainDays === "number" && Number.isFinite(remainDays) && remainDays > 0)
+      ? ` · 距重置 ${Math.round(remainDays)} 天` : "";
     svg.querySelectorAll("[data-month]").forEach(c => {
       c.addEventListener("mousemove", e => {
         const rect = box.getBoundingClientRect();
@@ -162,14 +177,14 @@
         tip.style.top = (e.clientY - rect.top - 10) + "px";
         const ym = c.dataset.month.replace("-", " 年 ") + " 月";
         const isCur = c.dataset.month === curKey;
-        tip.innerHTML = `<b>${ym}</b> · 月用量 ${c.dataset.val}%${isCur ? "（本月·进行中）" : ""}`;
+        tip.innerHTML = `<b>${ym}</b> · 月用量 ${c.dataset.val}%${isCur ? "（本月·进行中）" : ""}${isCur ? remainTxt : ""}`;
       });
       c.addEventListener("mouseleave", () => tip.style.display = "none");
     });
   }
 
   /* ── 单月视图：当月逐日曲线（原逻辑，X 按真实日期） ── */
-  function renderDaily(trend, monthKey, daysInMonth, eom) {
+  function renderDaily(trend, monthKey, daysInMonth, eom, remainDays) {
     const svg = $("chart");
     const W = 520, H = 220, PAD_L = 40, PAD_R = 16, PAD_T = 14, PAD_B = 26;
     const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
@@ -208,16 +223,26 @@
     const pts = trend.map(d => `${xOf(d).toFixed(1)},${yOf(d.monthly).toFixed(1)}`);
     const danger = eom > 100;
     const lineColor = danger ? "var(--danger)" : "var(--c1)";
-    // 预测延伸段（虚线）
+    // 预测延伸段（虚线）：终点 = 真实重置日（官网 resetInSec 反推），重置不在本月则画到月末
     let predict = "";
     if (eom > 0 && trend.length >= 2) {
       const last = trend[trend.length - 1];
       const lx = xOf(last), ly = yOf(last.monthly);
-      const ex = PAD_L + (daysInMonth - 1) / (daysInMonth - 1) * iw;
+      let endDay = daysInMonth;
+      if (typeof remainDays === "number" && Number.isFinite(remainDays) && remainDays > 0) {
+        const resetDay = new Date().getDate() + remainDays; // 今天 + 剩余天数（浮点）
+        if (resetDay <= daysInMonth + 1) endDay = Math.min(resetDay, daysInMonth);
+      }
+      const ex = PAD_L + (endDay - 1) / (daysInMonth - 1) * iw;
       const ey = yOf(Math.min(eom, yMax));
       predict = `<line x1="${lx}" y1="${ly}" x2="${ex}" y2="${ey}" stroke="${lineColor}" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.6"/>`;
       // 预测终点圈
       predict += `<circle cx="${ex}" cy="${ey}" r="4" fill="none" stroke="${lineColor}" stroke-width="1.5" stroke-dasharray="2 2"/>`;
+      // 重置在本月内：虚线位置画重置竖线 + 标注
+      if (endDay < daysInMonth) {
+        predict += `<line x1="${ex}" y1="${PAD_T}" x2="${ex}" y2="${PAD_T + ih}" stroke="${lineColor}" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>`;
+        predict += `<text class="day-lbl" x="${ex}" y="${PAD_T - 2}" text-anchor="middle" style="fill:${lineColor}">重置</text>`;
+      }
     }
 
     const areaPts = pts.length ? `${pts.join(" ")} ${xOf(trend[n-1]).toFixed(1)},${PAD_T + ih} ${xOf(trend[0]).toFixed(1)},${PAD_T + ih}` : "";
