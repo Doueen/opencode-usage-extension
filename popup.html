@@ -101,6 +101,25 @@ h1::before{content:"▮"}
 .bamt{font-size:24px;color:var(--c1);font-weight:700;letter-spacing:0;font-family:var(--font)}
 .bsub{color:var(--dim);font-size:9px;margin-top:2px}
 
+/* 实际用量行：名称 / tokens / 费用 */
+.drow{display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;padding:5px 0}
+.drow + .drow{border-top:1px dashed var(--line)}
+.dname{color:var(--dim);font-size:10px}
+.dval{color:var(--c1);font-weight:700;text-align:right;font-size:13px;letter-spacing:0}
+.dval small{color:var(--dim);font-size:9px;font-weight:400}
+.dcost{color:var(--dim);font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* 每日成本 mini 柱状图 */
+.dc-wrap{margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}
+.dc-title{color:var(--dim);font-size:9px;letter-spacing:1px;margin-bottom:6px}
+.dcosts{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;align-items:end}
+.dc-bar{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.dc-bar b{font-size:8px;color:var(--dim);font-weight:400;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dc-bar i{display:block;width:100%;height:46px;background:linear-gradient(180deg,var(--c1),var(--c2));border-radius:2px 2px 0 0;opacity:.85;min-height:3px}
+.dc-bar span{font-size:8px;color:var(--dim)}
+.dc-bar.today i{outline:1px solid var(--c3);opacity:1}
+.dc-bar.today span{color:var(--c3);font-weight:700}
+
 /* ═══════════ 错误/提示 ═══════════ */
 .errbox{color:var(--c3);font-size:10px;padding:4px 0;word-break:break-all}
 .hint{color:var(--dim);font-size:10px;margin-bottom:8px}
@@ -270,6 +289,11 @@ body[data-theme="cyber"] .go-btn{border-radius:0;border-right:3px solid var(--c2
     <a id="trend-link" href="#" title="月度用量趋势">
       <div class="trend-btn">📈 月度用量趋势 <b>查看</b></div>
     </a>
+
+    <div class="divider"></div>
+
+    <div class="sec-title"><span>实际用量 · 逐次明细聚合</span><span class="st" id="detail-st"></span></div>
+    <div id="detail-body"><div class="hint">获取中...</div></div>
 
     <div class="divider"></div>
 

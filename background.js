@@ -194,8 +194,190 @@ chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM_NAME) refresh();
 chrome.runtime.onInstalled.addListener(async () => { await setupAlarm(); refresh(); });
 chrome.runtime.onStartup.addListener(async () => { await setupAlarm(); refresh(); });
 
+/* ═══ 实际用量明细（官网 server function 直调）═══
+ * 协议（SolidStart 新版，2026-08 实测）：
+ *   POST https://opencode.ai/_server  （URL 无参数）
+ *   headers: x-server-id=<RPC hash> / x-server-instance=server-fn:N / Content-Type: application/json
+ *   body: {"t":{"t":9,"i":0,"l":<n>,"a":[{"t":1,"s":"字符串"} | {"t":0,"s":数字}...],"o":0},"f":31,"m":[]}
+ *   响应: ";0x<hex>;((self.$R=...)($R=>$R[0]=<JS 序列化数据>)(...))"，记录字段与 SSR 内嵌一致
+ * RPC:
+ *   usage.list  bfd684bf...  [wsid, page] 每页 50 条逐次调用明细（timeCreated/model/各 tokens/cost）
+ *   costs.list  15702f3a...  [wsid, year, month(0-based), tzOffset("+08:00")] 每日成本（date/model/totalCost）
+ * 本模块：翻页聚合当日全部 tokens；getCosts 取整月每日成本。popup 打开时按需拉取，5 分钟缓存。
+ * 隔离新增：失败/未登录时静默降级，不影响既有配额抓取。
+ */
+const USAGE_DETAIL_TTL = 5 * 60 * 1000;  // 明细缓存 5 分钟（避免高频请求）
+const USAGE_PAGE_SIZE = 50;
+const USAGE_MAX_PAGES = 20;             // 翻页防呆上限（1000 条）
+const RPC_USAGE_LIST = "bfd684bfc2e4eed05cd0b518f5e4eafd3f3376e3938abb9e536e7c03df831e5c";
+const RPC_COSTS_LIST = "15702f3a12ff8bff357f8c2aa154a17e65b746d5f6b96adc9002c86ee0c15205";
+
+/* SolidStart 新协议：参数序列化 + RPC 调用，返回原始 JS 序列化文本 */
+async function fetchServerFunction(rid, args) {
+  const a = args.map(x => {
+    if (typeof x === "string") return { t: 1, s: x };
+    if (typeof x === "boolean") return { t: 2, s: x ? 1 : 0 };
+    return { t: 0, s: x };
+  });
+  const body = { t: { t: 9, i: 0, l: a.length, a, o: 0 }, f: 31, m: [] };
+  const res = await fetch("https://opencode.ai/_server", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "x-server-id": rid,
+      "x-server-instance": "server-fn:0",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const txt = await res.text();
+  if (!txt.includes("$R")) throw new Error("parse_failed");
+  return txt;
+}
+
+/* 解析 usage.list 序列化文本 → 记录数组（正则逐条，与 SSR 字段顺序一致） */
+function parseUsageRows(txt) {
+  const rows = [];
+  const re = /\{id:"usg_[^"]*",workspaceID:"[^"]*",timeCreated:\$R\[\d+\]=new Date\("([^"]+)"\),timeUpdated:\$R\[\d+\]=new Date\("[^"]+"\),timeDeleted:[^,]*,model:"([^"]*)",provider:"[^"]*",inputTokens:(\d+),outputTokens:(\d+),reasoningTokens:(\d+),cacheReadTokens:(\d+),cacheWrite5mTokens:(null|\d+),cacheWrite1hTokens:(null|\d+),cost:(\d+),keyID:"[^"]*",sessionID:"[^"]*",enrichment:\$R\[\d+\]=\{plan:"([^"]*)"\}/g;
+  let m;
+  while ((m = re.exec(txt)) !== null) {
+    rows.push({
+      id: m[0].match(/id:"(usg_[^"]+)"/)[1],
+      timeCreated: m[1], model: m[2],
+      inputTokens: +m[3], outputTokens: +m[4], reasoningTokens: +m[5],
+      cacheReadTokens: +m[6],
+      cacheWrite5mTokens: m[7] === "null" ? 0 : +m[7],
+      cacheWrite1hTokens: m[8] === "null" ? 0 : +m[8],
+      cost: +m[9], plan: m[10],
+    });
+  }
+  // 兜底：字段顺序若被官网调整，宽松正则提取核心字段
+  if (!rows.length) {
+    const loose = /timeCreated:\$R\[\d+\]=new Date\("([^"]+)"\),[^}]*?inputTokens:(\d+),[^}]*?outputTokens:(\d+),[^}]*?cost:(\d+)/g;
+    while ((m = loose.exec(txt)) !== null) {
+      rows.push({ id: "", timeCreated: m[1], model: "", inputTokens: +m[2], outputTokens: +m[3],
+                  reasoningTokens: 0, cacheReadTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0,
+                  cost: +m[4], plan: "" });
+    }
+  }
+  return rows;
+}
+
+/* 抓取全部调用明细：SSR 50 条（基础）+ 新协议翻页补全直到覆盖当日或上限 */
+async function fetchUsageRows(wsId) {
+  const usageUrl = "https://opencode.ai/workspace/" + encodeURIComponent(wsId) + "/usage";
+  let res = await fetch(usageUrl, { credentials: "include" }).catch(() => null);
+  if (!res || res.status === 302 || res.status === 401 || res.status === 403) throw new Error("not_logged_in");
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const html = await res.text();
+  if (html.includes("Continue with GitHub") || html.includes("Continue with Google")) {
+    throw new Error("not_logged_in");
+  }
+  // SSR 内嵌（第 0 页）→ 基础数据
+  const rows = html.includes('id:"usg_') ? parseUsageRows(html) : [];
+
+  // 翻页补全（新协议）：直到最旧记录早于今日零点 或 页不满 50 条 或 达上限
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const seen = new Set(rows.map(r => r.id).filter(Boolean));
+  for (let page = 1; page < USAGE_MAX_PAGES; page++) {
+    let txt;
+    try { txt = await fetchServerFunction(RPC_USAGE_LIST, [wsId, page]); }
+    catch (e) { break; }  // 翻页失败静默：SSR 数据仍可用
+    const pageRows = parseUsageRows(txt);
+    if (!pageRows.length) break;
+    let oldestT = Infinity, added = 0;
+    for (const r of pageRows) {
+      if (r.id && seen.has(r.id)) continue;
+      if (r.id) { seen.add(r.id); }
+      rows.push(r); added++;
+      const t = r.timeCreated ? new Date(r.timeCreated).getTime() : 0;
+      if (t && t < oldestT) oldestT = t;
+    }
+    if (added === 0 || pageRows.length < USAGE_PAGE_SIZE || oldestT < dayStart) break;
+  }
+  rows.limited = rows.length >= USAGE_PAGE_SIZE &&
+    rows.some(r => r.timeCreated && new Date(r.timeCreated).getTime() >= dayStart);
+  return rows;
+}
+
+/* 每日成本（getCosts：整月 date/model/totalCost）→ 按日聚合 [{date:"08-01", cost:美元}] */
+async function fetchDailyCosts(wsId) {
+  const now = new Date();
+  const tz = (() => {
+    const off = -now.getTimezoneOffset();
+    const s = (off >= 0 ? "+" : "-") + String(Math.abs(Math.floor(off / 60))).padStart(2, "0") +
+              ":" + String(Math.abs(off % 60)).padStart(2, "0");
+    return s;
+  })();
+  const txt = await fetchServerFunction(RPC_COSTS_LIST, [wsId, now.getFullYear(), now.getMonth(), tz]);
+  const re = /\{date:"([^"]+)",model:"[^"]*",totalCost:(\d+),keyId:"[^"]*",plan:(null|"[^"]*")\}/g;
+  const byDay = new Map();
+  let m;
+  while ((m = re.exec(txt)) !== null) {
+    const cost = (+m[2]) / 1e8;
+    byDay.set(m[1], (byDay.get(m[1]) || 0) + cost);
+  }
+  return [...byDay.entries()]
+    .map(([date, cost]) => ({ date: date.slice(5), cost }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/* 按 今日 / 本月 聚合 tokens 与费用（cost 原始单位 = 金额 × 1e8，与官网展示一致） */
+function aggUsage(rows) {
+  const now = new Date();
+  const monthKey = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  const sum = {
+    today:  { tokens: 0, cost: 0, calls: 0 },
+    month:  { tokens: 0, cost: 0, calls: 0 },
+    monthKey, sampledAt: Date.now(),
+    limited: !!(rows && rows.limited),
+  };
+  for (const r of rows) {
+    const t = r && r.timeCreated ? new Date(r.timeCreated) : null;
+    if (!t || isNaN(t.getTime())) continue;
+    const tokens = (r.inputTokens || 0) + (r.outputTokens || 0) + (r.reasoningTokens || 0) +
+                   (r.cacheReadTokens || 0) + (r.cacheWrite5mTokens || 0) + (r.cacheWrite1hTokens || 0);
+    const cost = (typeof r.cost === "number" && isFinite(r.cost)) ? r.cost / 1e8 : 0;
+    const rowMonth = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0");
+    const isToday = rowMonth === monthKey && t.getDate() === now.getDate();
+    if (isToday) { sum.today.tokens += tokens; sum.today.cost += cost; sum.today.calls++; }
+    if (rowMonth === monthKey) { sum.month.tokens += tokens; sum.month.cost += cost; sum.month.calls++; }
+  }
+  return sum;
+}
+
+async function getUsageDetail() {
+  const { oc_usage_detail, oc_wsid } = await chrome.storage.local.get(["oc_usage_detail", "oc_wsid"]);
+  const wsId = (oc_wsid || "").trim();
+  if (!wsId) return { error: "no_wsid", wsId: "", updatedAt: Date.now() };
+  // 缓存新鲜（含失败结果，避免 popup 反复重试）→ 直接返回
+  if (oc_usage_detail && oc_usage_detail.wsId === wsId && oc_usage_detail.updatedAt &&
+      Date.now() - oc_usage_detail.updatedAt < USAGE_DETAIL_TTL) {
+    return oc_usage_detail;
+  }
+  try {
+    const rows = await fetchUsageRows(wsId);
+    const out = Object.assign(aggUsage(rows), { wsId, updatedAt: Date.now() });
+    // 每日成本（失败不影响主数据）
+    try { out.dailyCosts = await fetchDailyCosts(wsId); }
+    catch (e) { /* 每日成本可选 */ }
+    await chrome.storage.local.set({ oc_usage_detail: out });
+    return out;
+  } catch (e) {
+    const out = { error: e.message || String(e), wsId, updatedAt: Date.now() };
+    await chrome.storage.local.set({ oc_usage_detail: out });
+    return out;
+  }
+}
+
 /* popup 打开时：读缓存立即渲染，再后台刷新一次 */
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === "get_usage_detail") {
+    getUsageDetail().then(sendResponse);
+    return true;
+  }
   if (msg.type === "get") {
     chrome.storage.local.get("oc_usage").then(d => sendResponse(d.oc_usage || null));
     return true;

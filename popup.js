@@ -233,6 +233,55 @@ function render(data) {
   $("errbox").innerHTML = err;
 }
 
+/* ═══ 实际用量渲染（今日/本月，精确 tokens 聚合）═══ */
+function fmtTokens(n) {
+  n = Math.round(n || 0);
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return String(n);
+}
+/* 每日成本 mini 柱状图（最近 7 天） */
+function renderDailyCosts(dailyCosts) {
+  if (!Array.isArray(dailyCosts) || !dailyCosts.length) return "";
+  const last7 = dailyCosts.slice(-7);
+  const max = Math.max(...last7.map(d => d.cost), 1e-6);
+  const today = new Date();
+  const todayKey = String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+  const bars = last7.map(d => {
+    const h = Math.max(4, Math.round((d.cost / max) * 100));
+    const isToday = d.date === todayKey;
+    return '<div class="dc-bar' + (isToday ? " today" : "") + '" title="' + d.date + ' · $' + d.cost.toFixed(4) + '">' +
+      '<b>$' + (d.cost >= 0.01 ? d.cost.toFixed(2) : d.cost.toFixed(3)) + '</b>' +
+      '<i style="height:' + h + '%"></i>' +
+      '<span>' + d.date.slice(3) + '</span></div>';
+  }).join("");
+  return '<div class="dc-wrap"><div class="dc-title">每日成本 · 近 ' + last7.length + ' 天</div>' +
+    '<div class="dcosts">' + bars + '</div></div>';
+}
+function renderDetail(d) {
+  const body = $("detail-body"), st = $("detail-st");
+  if (!d) { body.innerHTML = '<div class="hint">获取中...</div>'; st.textContent = ""; return; }
+  if (d.error === "no_wsid") {
+    body.innerHTML = '<div class="hint">设置工作区 ID 后显示实际用量</div>'; st.textContent = "—"; return;
+  }
+  if (d.error) {
+    body.innerHTML = '<div class="hint">用量明细暂不可用（' + esc(d.error) + '）</div>'; st.textContent = "ERR"; return;
+  }
+  st.textContent = d.updatedAt ? "OK" : "";
+  const row = (name, u) =>
+    '<div class="drow" title="' + u.calls + ' 次调用"><span class="dname">' + name + '</span>' +
+    '<span class="dval">' + fmtTokens(u.tokens) + ' <small>tokens</small></span>' +
+    '<span class="dcost">' + u.cost.toFixed(4) + '</span></div>';
+  body.innerHTML =
+    row("今日", d.today) +
+    row("本月", d.month) +
+    renderDailyCosts(d.dailyCosts) +
+    '<div class="hint" style="margin:2px 0 0">' +
+    (d.limited ? '当日调用可能超 ' + (d.today.calls) + ' 次未全量 · ' : '') +
+    '费用单位与官网 /usage 一致 · ' + esc(d.monthKey || "") + '</div>';
+}
+
 /* ═══ 月度趋势入口 ═══ */
 $("trend-link").addEventListener("click", e => {
   e.preventDefault();
@@ -241,6 +290,8 @@ $("trend-link").addEventListener("click", e => {
 
 function refresh() {
   chrome.runtime.sendMessage({ type: "refresh" }, render);
+  /* 实际用量明细（5 分钟缓存，独立于配额刷新） */
+  chrome.runtime.sendMessage({ type: "get_usage_detail" }, renderDetail);
 }
 
 $("key-save").onclick = saveKey;

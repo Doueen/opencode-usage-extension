@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OpenCode 用量监控",
-  "version": "1.0.0",
-  "description": "极简版：查看 opencode Go 订阅配额与 DeepSeek 余额（30秒自动刷新）",
+  "version": "1.1.0",
+  "description": "查看 opencode Go 订阅配额、实际用量明细（日/月 tokens）与 DeepSeek 余额",
   "permissions": ["alarms", "storage", "tabs"],
   "host_permissions": [
     "https://opencode.ai/*",

@@ -2,7 +2,7 @@
 
 > 在浏览器工具栏实时查看 OpenCode（Zen/Go）订阅配额与 DeepSeek 账户余额的 Edge/Chrome 扩展。
 
-![version](https://img.shields.io/badge/version-1.0.0-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Edge%2FChrome-0078d7)
+![version](https://img.shields.io/badge/version-1.1.0-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Edge%2FChrome-0078d7)
 
 ---
 
@@ -11,6 +11,7 @@
 | 功能 | 说明 |
 |---|---|
 | 📊 **Go 订阅配额** | 滚动 / 周 / 月三周期使用百分比 + 进度条 + **重置倒计时（天/时/分）** |
+| 🔢 **实际用量明细** | 直调官网 server function（usage.list 翻页 + costs.list）：**今日 / 本月真实 tokens 与费用**（翻页聚合当日全部调用，非截断）+ **每日成本柱状图**（近 7 天），5 分钟缓存 |
 | 💰 **DeepSeek 余额** | 显示账户余额（可选启用，Key 仅存本地浏览器） |
 | 🛡 **工具栏角标** | 图标直接显示所选数值百分比，颜色分级（<50% 绿 / >50% 橙 / >80% 红） |
 | 🎨 **5 种界面风格** | 终端矩阵 / 玻璃拟态 / 极简记账 / 复古像素 / 赛博朋克，一键切换 |
@@ -67,6 +68,7 @@
 - **Manifest V3**，权限最小化：仅 `alarms` + `storage`
 - 数据源：
   - OpenCode 配额：读取官网 SSR 页面（自动携带登录态，无额外认证）
+  - OpenCode 实际用量：直调官网 server function（SolidStart `/_server` 协议，`x-server-id` 头）：`usage.list` 翻页取全部明细（日/月聚合 tokens 与费用）+ `costs.list` 取整月每日成本（近 7 天柱状图）
   - DeepSeek 余额：官方 `GET /user/balance` API
 - 后台 Service Worker 通过 `chrome.alarms` 定时抓取（MV3 最小周期 30s）
 - popup 打开期间按用户设置的频率实时刷新（支持 <30s 的自定义值）
